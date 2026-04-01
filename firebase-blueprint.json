@@ -1,0 +1,45 @@
+{
+  "entities": {
+    "Student": {
+      "title": "Student",
+      "description": "A student in the WIT class.",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string", "description": "The student's full name." },
+        "email": { "type": "string", "description": "The student's email address." },
+        "avatar": { "type": "string", "description": "The student's chosen emoji avatar." },
+        "stars": { "type": "integer", "description": "The number of stars earned." },
+        "trophies": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "List of trophies earned by the student."
+        }
+      },
+      "required": ["name", "email", "stars", "trophies"]
+    },
+    "Suggestion": {
+      "title": "Suggestion",
+      "description": "A suggestion sent by a student to the teacher.",
+      "type": "object",
+      "properties": {
+        "studentEmail": { "type": "string", "description": "Email of the student who sent the suggestion." },
+        "studentName": { "type": "string", "description": "Name of the student who sent the suggestion." },
+        "text": { "type": "string", "description": "The suggestion text." },
+        "feedback": { "type": "string", "description": "The teacher's feedback." },
+        "status": { "type": "string", "enum": ["pending", "answered"], "description": "Status of the suggestion." },
+        "createdAt": { "type": "string", "format": "date-time", "description": "When the suggestion was created." }
+      },
+      "required": ["studentEmail", "studentName", "text", "status", "createdAt"]
+    }
+  },
+  "firestore": {
+    "students": {
+      "schema": "Student",
+      "description": "Collection of students."
+    },
+    "suggestions": {
+      "schema": "Suggestion",
+      "description": "Collection of student suggestions."
+    }
+  }
+}
