@@ -16,7 +16,7 @@ export default function TeacherDashboard() {
   const [bulkInput, setBulkInput] = useState('');
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: string; type: 'student' | 'suggestion' } | null>(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: string | 'all'; type: 'student' | 'suggestion' | 'all_students' | 'all_suggestions' } | null>(null);
   const [bulkStatus, setBulkStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -113,6 +113,14 @@ export default function TeacherDashboard() {
     setShowConfirmDelete(null);
   };
 
+  const deleteAllStudents = async () => {
+    const batch = students.map(s => deleteDoc(doc(db, 'students', s.id)));
+    await Promise.all(batch);
+    setShowConfirmDelete(null);
+    setBulkStatus({ type: 'success', message: 'Todos os alunos foram removidos.' });
+    setTimeout(() => setBulkStatus(null), 3000);
+  };
+
   const handleBulkAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bulkInput.trim()) return;
@@ -158,6 +166,14 @@ export default function TeacherDashboard() {
   const deleteSuggestion = async (id: string) => {
     await deleteDoc(doc(db, 'suggestions', id));
     setShowConfirmDelete(null);
+  };
+
+  const deleteAllSuggestions = async () => {
+    const batch = suggestions.map(s => deleteDoc(doc(db, 'suggestions', s.id)));
+    await Promise.all(batch);
+    setShowConfirmDelete(null);
+    setBulkStatus({ type: 'success', message: 'Todas as mensagens foram removidas.' });
+    setTimeout(() => setBulkStatus(null), 3000);
   };
 
   const updateStars = async (id: string, current: number, delta: number) => {
@@ -279,6 +295,16 @@ export default function TeacherDashboard() {
               <Users className="w-6 h-6" />
             </div>
             <h2 className="text-2xl font-black text-white font-display uppercase tracking-tight">Gerenciar Alunos</h2>
+            {students.length > 0 && (
+              <button
+                onClick={() => setShowConfirmDelete({ id: 'all', type: 'all_students' })}
+                className="ml-2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                title="Excluir todos os alunos"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Excluir Todos</span>
+              </button>
+            )}
           </div>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
@@ -386,11 +412,23 @@ export default function TeacherDashboard() {
 
       {/* Suggestions Section */}
       <section className="glass-card p-8 rounded-[2rem]">
-        <div className="flex items-center gap-3 mb-8">
-          <div className="p-2 bg-tech-magenta/10 text-tech-magenta rounded-lg">
-            <MessageSquare className="w-6 h-6" />
+        <div className="flex items-center justify-between mb-8">
+          <div className="flex items-center gap-3">
+            <div className="p-2 bg-tech-magenta/10 text-tech-magenta rounded-lg">
+              <MessageSquare className="w-6 h-6" />
+            </div>
+            <h2 className="text-2xl font-black text-white font-display uppercase tracking-tight">Comunicações da Tripulação</h2>
           </div>
-          <h2 className="text-2xl font-black text-white font-display uppercase tracking-tight">Comunicações da Tripulação</h2>
+          {suggestions.length > 0 && (
+            <button
+              onClick={() => setShowConfirmDelete({ id: 'all', type: 'all_suggestions' })}
+              className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+              title="Excluir todas as mensagens"
+            >
+              <Trash2 className="w-4 h-4" />
+              <span className="hidden sm:inline">Excluir Todas</span>
+            </button>
+          )}
         </div>
 
         <div className="space-y-4">
@@ -460,6 +498,10 @@ export default function TeacherDashboard() {
               <p className="text-slate-400 text-sm mb-8 font-medium">
                 {showConfirmDelete.type === 'student' 
                   ? 'Esta ação removerá o aluno e todo o seu progresso permanentemente.' 
+                  : showConfirmDelete.type === 'all_students'
+                  ? 'ATENÇÃO: Isso excluirá TODOS os alunos e seus progressos. Esta ação não pode ser desfeita!'
+                  : showConfirmDelete.type === 'all_suggestions'
+                  ? 'ATENÇÃO: Isso excluirá TODAS as mensagens recebidas. Esta ação não pode ser desfeita!'
                   : 'Esta mensagem será apagada para sempre.'}
               </p>
               <div className="grid grid-cols-2 gap-4">
@@ -470,7 +512,12 @@ export default function TeacherDashboard() {
                   Cancelar
                 </button>
                 <button
-                  onClick={() => showConfirmDelete.type === 'student' ? deleteStudent(showConfirmDelete.id) : deleteSuggestion(showConfirmDelete.id)}
+                  onClick={() => {
+                    if (showConfirmDelete.type === 'student') deleteStudent(showConfirmDelete.id as string);
+                    else if (showConfirmDelete.type === 'all_students') deleteAllStudents();
+                    else if (showConfirmDelete.type === 'all_suggestions') deleteAllSuggestions();
+                    else deleteSuggestion(showConfirmDelete.id as string);
+                  }}
                   className="py-3 rounded-xl bg-red-500 text-white font-black uppercase tracking-widest text-[10px] hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
                 >
                   Confirmar
