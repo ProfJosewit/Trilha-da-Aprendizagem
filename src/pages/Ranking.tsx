@@ -10,9 +10,17 @@ export default function Ranking() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'students'), orderBy('stars', 'desc'), limit(50));
+    const q = query(collection(db, 'students'), limit(100));
     const unsubscribe = onSnapshot(q, (snapshot) => {
-      setStudents(snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student)));
+      const studentList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+      // Sort by stars (desc) then by trophies count (desc)
+      const sortedList = [...studentList].sort((a, b) => {
+        if (b.stars !== a.stars) {
+          return b.stars - a.stars;
+        }
+        return (b.trophies?.length || 0) - (a.trophies?.length || 0);
+      });
+      setStudents(sortedList);
       setLoading(false);
     });
     return unsubscribe;
@@ -75,18 +83,21 @@ export default function Ranking() {
                     {student.name}
                     {isTop3 && <Medal className={cn("w-8 h-8", index === 0 ? "text-amber-400" : index === 1 ? "text-slate-200" : "text-orange-400")} />}
                   </h3>
-                  <div className="flex items-center gap-6 mt-2">
-                    <div className="flex items-center gap-2 text-slate-400 text-sm font-black uppercase tracking-widest">
-                      <Award className="w-5 h-5 text-tech-magenta" />
-                      <span>{student.trophies.length} Conquistas</span>
-                    </div>
-                  </div>
                 </div>
 
-                {/* Stars Count */}
-                <div className="flex items-center gap-5 bg-tech-cyan/10 px-10 py-6 rounded-3xl border border-tech-cyan/20 shadow-inner group-hover:bg-tech-cyan/20 transition-all">
-                  <Star className="w-10 h-10 text-tech-cyan fill-current drop-shadow-[0_0_12px_rgba(34,211,238,0.7)]" />
-                  <span className="text-4xl font-black text-white font-display">{student.stars}</span>
+                {/* Stats */}
+                <div className="flex items-center gap-4">
+                  {/* Trophies Count */}
+                  <div className="flex items-center gap-4 bg-tech-magenta/10 px-8 py-5 rounded-3xl border border-tech-magenta/20 shadow-inner group-hover:bg-tech-magenta/20 transition-all">
+                    <Trophy className="w-8 h-8 text-tech-magenta drop-shadow-[0_0_10px_rgba(244,114,182,0.6)]" />
+                    <span className="text-3xl font-black text-white font-display">{student.trophies?.length || 0}</span>
+                  </div>
+                  
+                  {/* Stars Count */}
+                  <div className="flex items-center gap-4 bg-tech-cyan/10 px-8 py-5 rounded-3xl border border-tech-cyan/20 shadow-inner group-hover:bg-tech-cyan/20 transition-all">
+                    <Star className="w-8 h-8 text-tech-cyan fill-current drop-shadow-[0_0_10px_rgba(34,211,238,0.6)]" />
+                    <span className="text-3xl font-black text-white font-display">{student.stars}</span>
+                  </div>
                 </div>
               </motion.div>
             );
