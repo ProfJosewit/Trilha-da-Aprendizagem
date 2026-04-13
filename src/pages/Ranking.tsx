@@ -79,10 +79,17 @@ export default function Ranking() {
 
                 {/* Name & Info */}
                 <div className="flex-1">
-                  <h3 className="text-3xl font-black text-white flex items-center gap-4 font-display tracking-tight">
-                    {student.name}
+                  <div className="flex items-center gap-4">
+                    <h3 className="text-3xl font-black text-white font-display tracking-tight">
+                      {student.name}
+                    </h3>
                     {isTop3 && <Medal className={cn("w-8 h-8", index === 0 ? "text-amber-400" : index === 1 ? "text-slate-200" : "text-orange-400")} />}
-                  </h3>
+                    {student.grade && (
+                      <span className="px-3 py-1 rounded-xl bg-tech-cyan/10 text-tech-cyan text-[10px] font-black uppercase tracking-widest border border-tech-cyan/20">
+                        {student.grade}
+                      </span>
+                    )}
+                  </div>
                 </div>
 
                 {/* Stats */}

@@ -12,10 +12,11 @@ export default function TeacherDashboard() {
 
   const [students, setStudents] = useState<Student[]>([]);
   const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
-  const [newStudent, setNewStudent] = useState({ name: '', email: '' });
+  const [newStudent, setNewStudent] = useState({ name: '', email: '', grade: '' });
   const [bulkInput, setBulkInput] = useState('');
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
+  const [gradeFilter, setGradeFilter] = useState('all');
   const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: string | 'all'; type: 'student' | 'suggestion' | 'all_students' | 'all_suggestions' } | null>(null);
   const [bulkStatus, setBulkStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
@@ -105,7 +106,7 @@ export default function TeacherDashboard() {
       stars: 0,
       trophies: []
     });
-    setNewStudent({ name: '', email: '' });
+    setNewStudent({ name: '', email: '', grade: '' });
   };
 
   const deleteStudent = async (id: string) => {
@@ -136,11 +137,13 @@ export default function TeacherDashboard() {
         if (parts.length >= 2) {
           const name = parts[0].trim();
           const email = parts[1].trim();
+          const grade = parts[2]?.trim() || '';
           
           if (name && email) {
             await addDoc(collection(db, 'students'), {
               name,
               email,
+              grade,
               avatar: '🙂',
               stars: 0,
               trophies: []
@@ -182,6 +185,12 @@ export default function TeacherDashboard() {
     });
   };
 
+  const updateGrade = async (id: string, newGrade: string) => {
+    await updateDoc(doc(db, 'students', id), {
+      grade: newGrade
+    });
+  };
+
   const toggleTrophy = async (student: Student, trophyId: string) => {
     const hasTrophy = student.trophies.includes(trophyId);
     const newTrophies = hasTrophy 
@@ -200,10 +209,14 @@ export default function TeacherDashboard() {
     });
   };
 
-  const filteredStudents = students.filter(s => 
-    s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-    s.email.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const filteredStudents = students.filter(s => {
+    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                         s.email.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesGrade = gradeFilter === 'all' || s.grade === gradeFilter;
+    return matchesSearch && matchesGrade;
+  });
+
+  const uniqueGrades = Array.from(new Set(students.map(s => s.grade).filter(Boolean))).sort();
 
   return (
     <div className="space-y-12">
@@ -243,12 +256,12 @@ export default function TeacherDashboard() {
         {isBulkMode ? (
           <form onSubmit={handleBulkAdd} className="space-y-4">
             <p className="text-xs text-slate-500 font-bold mb-2">
-              Cole uma lista de alunos (um por linha) no formato: <span className="text-tech-cyan">Nome, Email</span>
+              Cole uma lista de alunos (um por linha) no formato: <span className="text-tech-cyan">Nome, Email, Série (opcional)</span>
             </p>
             <textarea
               value={bulkInput}
               onChange={e => setBulkInput(e.target.value)}
-              placeholder="Exemplo:&#10;João Silva, joao@email.com&#10;Maria Santos, maria@email.com"
+              placeholder="Exemplo:&#10;João Silva, joao@email.com, 5º Ano&#10;Maria Santos, maria@email.com, 6º Ano"
               className="w-full h-32 px-4 py-3 rounded-xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none font-mono text-sm resize-none"
               required
             />
@@ -260,7 +273,7 @@ export default function TeacherDashboard() {
             </button>
           </form>
         ) : (
-          <form onSubmit={addStudent} className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <form onSubmit={addStudent} className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <input
               type="text"
               placeholder="Nome Completo"
@@ -276,6 +289,13 @@ export default function TeacherDashboard() {
               onChange={e => setNewStudent({ ...newStudent, email: e.target.value })}
               className="px-4 py-3 rounded-xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none"
               required
+            />
+            <input
+              type="text"
+              placeholder="Série (Ex: 5º Ano)"
+              value={newStudent.grade}
+              onChange={e => setNewStudent({ ...newStudent, grade: e.target.value })}
+              className="px-4 py-3 rounded-xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none"
             />
             <button
               type="submit"
@@ -306,15 +326,27 @@ export default function TeacherDashboard() {
               </button>
             )}
           </div>
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
-            <input
-              type="text"
-              placeholder="Buscar aluno..."
-              value={searchTerm}
-              onChange={e => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 rounded-xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none w-full md:w-64"
-            />
+          <div className="flex flex-col md:flex-row gap-4">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 w-5 h-5" />
+              <input
+                type="text"
+                placeholder="Buscar aluno..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="pl-10 pr-4 py-2 rounded-xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none w-full md:w-64"
+              />
+            </div>
+            <select
+              value={gradeFilter}
+              onChange={e => setGradeFilter(e.target.value)}
+              className="px-4 py-2 rounded-xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none font-bold text-xs uppercase tracking-widest cursor-pointer"
+            >
+              <option value="all">Todas as Séries</option>
+              {uniqueGrades.map(grade => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </select>
           </div>
         </div>
 
@@ -335,7 +367,16 @@ export default function TeacherDashboard() {
                     {student.avatar}
                   </div>
                   <div>
-                    <h3 className="font-black text-lg text-white font-display uppercase tracking-tight">{student.name}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className="font-black text-lg text-white font-display uppercase tracking-tight">{student.name}</h3>
+                      <input
+                        type="text"
+                        defaultValue={student.grade || ''}
+                        placeholder="Série"
+                        onBlur={(e) => updateGrade(student.id, e.target.value)}
+                        className="w-20 px-2 py-0.5 rounded-md bg-tech-cyan/10 text-tech-cyan text-[10px] font-black uppercase tracking-widest border border-tech-cyan/20 focus:ring-1 focus:ring-tech-cyan outline-none"
+                      />
+                    </div>
                     <p className="text-xs text-slate-500 font-bold">{student.email}</p>
                     <div className="flex items-center gap-4 mt-2">
                       <div className="flex items-center gap-1 text-tech-cyan font-black">

@@ -150,7 +150,14 @@ export default function StudentDashboard() {
         </div>
 
         <div className="flex-1 text-center md:text-left">
-          <h2 className="text-6xl font-black text-white mb-2 font-display uppercase tracking-tight">{student.name}</h2>
+          <div className="flex flex-col md:flex-row items-center md:items-end gap-3 mb-2">
+            <h2 className="text-6xl font-black text-white font-display uppercase tracking-tight leading-none">{student.name}</h2>
+            {student.grade && (
+              <span className="px-4 py-1 rounded-xl bg-tech-cyan/10 text-tech-cyan text-xs font-black uppercase tracking-widest border border-tech-cyan/20 mb-1">
+                {student.grade}
+              </span>
+            )}
+          </div>
           <p className="text-slate-500 font-black uppercase tracking-[0.3em] text-[10px] mb-8">{student.email}</p>
           
           <div className="flex flex-wrap justify-center md:justify-start gap-8">

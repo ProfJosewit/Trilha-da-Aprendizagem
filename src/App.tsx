@@ -21,6 +21,7 @@ export interface Student {
   avatar: string;
   stars: number;
   trophies: string[];
+  grade?: string;
 }
 
 export interface Suggestion {
