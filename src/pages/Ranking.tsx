@@ -10,19 +10,39 @@ export default function Ranking() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const q = query(collection(db, 'students'), limit(100));
+    // Ordering by stars desc on the server ensures we always get the top performers first.
+    // If we have more than 100 students, this is essential.
+    const q = query(collection(db, 'students'), orderBy('stars', 'desc'), limit(100));
+    
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const studentList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
-      // Sort by stars (desc) then by trophies count (desc)
+      
+      // Secondary sort by trophies count client-side (since Firestore can't sort by array length directly)
       const sortedList = [...studentList].sort((a, b) => {
         if (b.stars !== a.stars) {
           return b.stars - a.stars;
         }
         return (b.trophies?.length || 0) - (a.trophies?.length || 0);
       });
+      
       setStudents(sortedList);
       setLoading(false);
+    }, (error) => {
+      console.error("Erro ao carregar ranking:", error);
+      // Fallback: If stars desc requires an index that doesn't exist, it might fail.
+      // In that case, we try without orderBy.
+      const fallbackQuery = query(collection(db, 'students'), limit(100));
+      onSnapshot(fallbackQuery, (snapshot) => {
+        const studentList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
+        const sortedList = [...studentList].sort((a, b) => {
+          if (b.stars !== a.stars) return b.stars - a.stars;
+          return (b.trophies?.length || 0) - (a.trophies?.length || 0);
+        });
+        setStudents(sortedList);
+        setLoading(false);
+      });
     });
+    
     return unsubscribe;
   }, []);
 
@@ -56,9 +76,13 @@ export default function Ranking() {
             return (
               <motion.div
                 key={student.id}
+                layout
                 initial={{ opacity: 0, x: -30 }}
                 animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: index * 0.05 }}
+                transition={{ 
+                  delay: index * 0.05,
+                  layout: { type: "spring", stiffness: 300, damping: 30 }
+                }}
                 className={cn(
                   "glass-card p-8 rounded-[2.5rem] flex items-center gap-8 group hover:border-tech-cyan/50 transition-all",
                   isTop3 && "border-white/20 bg-white/5"
