@@ -6,7 +6,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, Star, Trophy, MessageSquare, CheckCircle, XCircle, UserPlus, Search, ChevronRight, Award, Users } from 'lucide-react';
 
 export default function TeacherDashboard() {
-  const { user, isTeacher, loginTeacher, logout } = useAuth();
+  const { user, isTeacher, loginTeacher, loginWithGoogle, logout } = useAuth();
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
 
@@ -82,6 +82,21 @@ export default function TeacherDashboard() {
           >
             Entrar no Comando
           </button>
+          
+          <div className="flex items-center gap-4 my-2">
+            <div className="h-px flex-1 bg-white/5" />
+            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest italic">OU</span>
+            <div className="h-px flex-1 bg-white/5" />
+          </div>
+
+          <button
+            type="button"
+            onClick={loginWithGoogle}
+            className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black hover:bg-white/10 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs"
+          >
+            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
+            Entrar com Google (Recomendado)
+          </button>
         </form>
       </div>
     );
@@ -130,6 +145,22 @@ export default function TeacherDashboard() {
     setShowConfirmDelete(null);
     setBulkStatus({ type: 'success', message: `${unassigned.length} alunos sem série foram removidos.` });
     setTimeout(() => setBulkStatus(null), 3000);
+  };
+
+  const toggleHelper = async (studentId: string, currentStatus: boolean) => {
+    try {
+      await updateDoc(doc(db, 'students', studentId), {
+        isHelper: !currentStatus
+      });
+      setBulkStatus({ 
+        type: 'success', 
+        message: !currentStatus ? 'Aluno promovido a ajudante!' : 'Aluno removido das funções de ajudante.' 
+      });
+      setTimeout(() => setBulkStatus(null), 3000);
+    } catch (err) {
+      setBulkStatus({ type: 'error', message: 'Erro ao atualizar status de ajudante.' });
+      setTimeout(() => setBulkStatus(null), 3000);
+    }
   };
 
   const handleBulkAdd = async (e: React.FormEvent) => {

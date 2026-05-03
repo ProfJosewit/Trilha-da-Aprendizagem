@@ -22,6 +22,8 @@ export interface Student {
   stars: number;
   trophies: string[];
   grade?: string;
+  isHelper?: boolean;
+  helperOrder?: number;
 }
 
 export interface Suggestion {
@@ -58,6 +60,7 @@ interface AuthState {
   loading: boolean;
   isTeacher: boolean;
   loginTeacher: (user: string, pass: string) => boolean;
+  loginWithGoogle: () => Promise<boolean>;
   loginStudent: (email: string) => Promise<boolean>;
   logout: () => void;
 }
@@ -77,6 +80,7 @@ export const useAuth = () => useContext(AuthContext);
 import TeacherDashboard from './pages/TeacherDashboard';
 import StudentDashboard from './pages/StudentDashboard';
 import Ranking from './pages/Ranking';
+import Helpers from './pages/Helpers';
 import Home from './pages/Home';
 
 export default function App() {
@@ -86,13 +90,58 @@ export default function App() {
   }>({ user: null, loading: true });
 
   useEffect(() => {
-    const saved = localStorage.getItem('wit_session');
-    if (saved) {
-      setAuthState({ user: JSON.parse(saved), loading: false });
-    } else {
-      setAuthState(prev => ({ ...prev, loading: false }));
-    }
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (firebaseUser) {
+        const isTeacherEmail = firebaseUser.email === 'maker.josesilva@educbarueri.sp.gov.br';
+        
+        if (isTeacherEmail) {
+          const user = { 
+            email: firebaseUser.email!, 
+            name: firebaseUser.displayName || 'Professor', 
+            role: 'teacher' as const 
+          };
+          setAuthState({ user, loading: false });
+        } else {
+          // Check if it's a student
+          const q = query(collection(db, 'students'), where('email', '==', firebaseUser.email));
+          const snapshot = await getDocs(q);
+          if (!snapshot.empty) {
+            const studentData = snapshot.docs[0].data();
+            const user = { 
+              email: firebaseUser.email!, 
+              name: studentData.name, 
+              role: 'student' as const 
+            };
+            setAuthState({ user, loading: false });
+          } else {
+            // Not a teacher and not a known student
+            setAuthState({ user: null, loading: false });
+          }
+        }
+      } else {
+        // No firebase user, check local storage for legacy/mock sessions
+        const saved = localStorage.getItem('wit_session');
+        if (saved) {
+          setAuthState({ user: JSON.parse(saved), loading: false });
+        } else {
+          setAuthState({ user: null, loading: false });
+        }
+      }
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  const loginWithGoogle = async () => {
+    const provider = new GoogleAuthProvider();
+    try {
+      await signInWithPopup(auth, provider);
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
+  };
 
   const loginTeacher = (username: string, pass: string) => {
     if (username === 'profjosewit' && pass === '159632wit') {
@@ -105,7 +154,7 @@ export default function App() {
   };
 
   const loginStudent = async (email: string) => {
-    // Check if student exists in DB
+    // Legacy support for mock session if needed, but prefer GAuth
     const q = query(collection(db, 'students'), where('email', '==', email));
     const snapshot = await getDocs(q);
     
@@ -119,7 +168,8 @@ export default function App() {
     return false;
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await signOut(auth);
     setAuthState({ user: null, loading: false });
     localStorage.removeItem('wit_session');
   };
@@ -142,6 +192,7 @@ export default function App() {
       loading: authState.loading, 
       isTeacher: authState.user?.role === 'teacher',
       loginTeacher,
+      loginWithGoogle,
       loginStudent,
       logout 
     }}>
@@ -154,6 +205,7 @@ export default function App() {
               <Route path="/teacher/*" element={<TeacherDashboard />} />
               <Route path="/student" element={<StudentDashboard />} />
               <Route path="/ranking" element={<Ranking />} />
+              <Route path="/ajudantes" element={<Helpers />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </div>
@@ -190,6 +242,17 @@ function Navbar() {
           >
             <TrophyIcon className="w-5 h-5" />
             <span className="hidden sm:inline">Ranking</span>
+          </Link>
+
+          <Link 
+            to="/ajudantes" 
+            className={cn(
+              "flex items-center gap-2 font-bold uppercase tracking-widest text-xs transition-all",
+              location.pathname === '/ajudantes' ? "text-tech-magenta" : "text-slate-400 hover:text-tech-magenta"
+            )}
+          >
+            <Award className="w-5 h-5" />
+            <span className="hidden sm:inline">Ajudantes</span>
           </Link>
 
           {user && (
