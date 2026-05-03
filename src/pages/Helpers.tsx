@@ -32,9 +32,15 @@ export default function Helpers() {
       
       const batch = writeBatch(db);
       let foundCount = 0;
+      const notFound: string[] = [];
 
-      // 1. Reset all helpers
-      allStudents.forEach(s => {
+      // HELPER: Normalize string for comparison (remove accents, lowercase, trim)
+      const normalize = (str: string) => 
+        str.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().trim();
+
+      // 1. Reset ONLY students who are currently helpers to save writes
+      const currentHelpers = allStudents.filter(s => s.isHelper);
+      currentHelpers.forEach(s => {
         batch.update(doc(db, 'students', s.id), { 
           isHelper: false,
           helperOrder: 999 
@@ -46,7 +52,11 @@ export default function Helpers() {
         const [namePart, gradePart] = line.split(',').map(s => s.trim());
         if (!namePart) return;
 
-        const student = allStudents.find(s => s.name.toLowerCase() === namePart.toLowerCase());
+        const normalizedInputName = normalize(namePart);
+        
+        // Find by exact match first, then by normalized match
+        const student = allStudents.find(s => normalize(s.name) === normalizedInputName);
+        
         if (student) {
           const updateData: any = {
             isHelper: true,
@@ -59,20 +69,31 @@ export default function Helpers() {
 
           batch.update(doc(db, 'students', student.id), updateData);
           foundCount++;
+        } else {
+          notFound.push(namePart);
         }
       });
 
       await batch.commit();
-      setStatus({ 
-        type: 'success', 
-        message: `${foundCount} ajudantes organizados com sucesso!` 
-      });
-      setBulkInput('');
-      setIsBulkMode(false);
-      setTimeout(() => setStatus(null), 3000);
+
+      if (notFound.length > 0) {
+        setStatus({ 
+          type: 'error', 
+          message: `Organizado ${foundCount} ajudantes. Os seguintes nomes não foram encontrados: ${notFound.join(', ')}` 
+        });
+      } else {
+        setStatus({ 
+          type: 'success', 
+          message: `${foundCount} ajudantes organizados com sucesso!` 
+        });
+        setBulkInput('');
+        setIsBulkMode(false);
+      }
+      
+      setTimeout(() => setStatus(null), 8000);
     } catch (err) {
       console.error(err);
-      setStatus({ type: 'error', message: 'Erro ao processar lista.' });
+      setStatus({ type: 'error', message: 'Erro ao processar lista no banco de dados.' });
     }
   };
 
