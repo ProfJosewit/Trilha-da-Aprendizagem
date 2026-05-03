@@ -17,7 +17,7 @@ export default function TeacherDashboard() {
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [gradeFilter, setGradeFilter] = useState('all');
-  const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: string | 'all'; type: 'student' | 'suggestion' | 'all_students' | 'all_suggestions' } | null>(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: string | 'all' | 'unassigned'; type: 'student' | 'suggestion' | 'all_students' | 'all_suggestions' | 'all_unassigned' } | null>(null);
   const [bulkStatus, setBulkStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -102,6 +102,7 @@ export default function TeacherDashboard() {
     if (!newStudent.name || !newStudent.email) return;
     await addDoc(collection(db, 'students'), {
       ...newStudent,
+      grade: newStudent.grade.trim(),
       avatar: '🙂',
       stars: 0,
       trophies: []
@@ -122,6 +123,15 @@ export default function TeacherDashboard() {
     setTimeout(() => setBulkStatus(null), 3000);
   };
 
+  const deleteUnassignedStudents = async () => {
+    const unassigned = students.filter(s => !s.grade || !s.grade.trim());
+    const batch = unassigned.map(s => deleteDoc(doc(db, 'students', s.id)));
+    await Promise.all(batch);
+    setShowConfirmDelete(null);
+    setBulkStatus({ type: 'success', message: `${unassigned.length} alunos sem série foram removidos.` });
+    setTimeout(() => setBulkStatus(null), 3000);
+  };
+
   const handleBulkAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!bulkInput.trim()) return;
@@ -133,11 +143,11 @@ export default function TeacherDashboard() {
       for (const line of lines) {
         if (!line.trim()) continue;
         
-        const parts = line.split(/[,;\t]/);
+        const parts = line.split(/[,;\t]/).map(p => p.trim());
         if (parts.length >= 2) {
-          const name = parts[0].trim();
-          const email = parts[1].trim();
-          const grade = parts[2]?.trim() || '';
+          const name = parts[0];
+          const email = parts[1];
+          const grade = parts[2] || newStudent.grade.trim();
           
           if (name && email) {
             await addDoc(collection(db, 'students'), {
@@ -187,7 +197,7 @@ export default function TeacherDashboard() {
 
   const updateGrade = async (id: string, newGrade: string) => {
     await updateDoc(doc(db, 'students', id), {
-      grade: newGrade
+      grade: newGrade.trim()
     });
   };
 
@@ -210,13 +220,17 @@ export default function TeacherDashboard() {
   };
 
   const filteredStudents = students.filter(s => {
-    const matchesSearch = s.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                         s.email.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesGrade = gradeFilter === 'all' || s.grade === gradeFilter;
+    const searchLower = searchTerm.toLowerCase();
+    const matchesSearch = s.name.toLowerCase().includes(searchLower) || 
+                         s.email.toLowerCase().includes(searchLower) ||
+                         (s.grade?.toLowerCase().includes(searchLower));
+    const matchesGrade = gradeFilter === 'all' || s.grade?.trim() === gradeFilter;
     return matchesSearch && matchesGrade;
   });
 
-  const uniqueGrades = Array.from(new Set(students.map(s => s.grade).filter(Boolean))).sort();
+  const uniqueGrades = (Array.from(new Set(students.map(s => s.grade?.trim()).filter(Boolean))) as string[]).sort((a, b) => 
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+  );
 
   return (
     <div className="space-y-12">
@@ -255,13 +269,25 @@ export default function TeacherDashboard() {
 
         {isBulkMode ? (
           <form onSubmit={handleBulkAdd} className="space-y-4">
-            <p className="text-xs text-slate-500 font-bold mb-2">
-              Cole uma lista de alunos (um por linha) no formato: <span className="text-tech-cyan">Nome, Email, Série (opcional)</span>
-            </p>
+            <div className="flex flex-col md:flex-row gap-4 mb-2">
+              <p className="flex-1 text-xs text-slate-500 font-bold">
+                Cole uma lista de alunos (um por linha) no formato: <span className="text-tech-cyan">Nome, Email, Série (opcional)</span>
+              </p>
+              <div className="flex items-center gap-2 bg-tech-bg/50 px-3 py-1.5 rounded-xl border border-white/10 shrink-0">
+                <span className="text-[10px] font-black text-tech-cyan uppercase tracking-widest">Série Padrão:</span>
+                <input
+                  type="text"
+                  placeholder="Ex: 5º B"
+                  value={newStudent.grade}
+                  onChange={e => setNewStudent({ ...newStudent, grade: e.target.value })}
+                  className="w-24 bg-transparent text-white text-[10px] font-black uppercase tracking-widest outline-none focus:text-tech-cyan"
+                />
+              </div>
+            </div>
             <textarea
               value={bulkInput}
               onChange={e => setBulkInput(e.target.value)}
-              placeholder="Exemplo:&#10;João Silva, joao@email.com, 5º Ano&#10;Maria Santos, maria@email.com, 6º Ano"
+              placeholder="Exemplo:&#10;João Silva, joao@email.com&#10;Maria Santos, maria@email.com"
               className="w-full h-32 px-4 py-3 rounded-xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none font-mono text-sm resize-none"
               required
             />
@@ -315,16 +341,28 @@ export default function TeacherDashboard() {
               <Users className="w-6 h-6" />
             </div>
             <h2 className="text-2xl font-black text-white font-display uppercase tracking-tight">Gerenciar Alunos</h2>
-            {students.length > 0 && (
-              <button
-                onClick={() => setShowConfirmDelete({ id: 'all', type: 'all_students' })}
-                className="ml-2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                title="Excluir todos os alunos"
-              >
-                <Trash2 className="w-4 h-4" />
-                <span className="hidden sm:inline">Excluir Todos</span>
-              </button>
-            )}
+            <div className="flex items-center gap-2">
+              {students.length > 0 && (
+                <button
+                  onClick={() => setShowConfirmDelete({ id: 'all', type: 'all_students' })}
+                  className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                  title="Excluir todos os alunos"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Excluir Todos</span>
+                </button>
+              )}
+              {students.some(s => !s.grade || !s.grade.trim()) && (
+                <button
+                  onClick={() => setShowConfirmDelete({ id: 'unassigned', type: 'all_unassigned' })}
+                  className="p-2 text-amber-500 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                  title="Excluir alunos sem série"
+                >
+                  <XCircle className="w-4 h-4" />
+                  <span className="hidden sm:inline">Limpar Sem Série</span>
+                </button>
+              )}
+            </div>
           </div>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative">
@@ -352,101 +390,114 @@ export default function TeacherDashboard() {
 
         <div className="grid grid-cols-1 gap-6">
           <AnimatePresence>
-            {filteredStudents.map(student => (
+            {filteredStudents.length === 0 ? (
               <motion.div
-                key={student.id}
-                layout
-                initial={{ opacity: 0, scale: 0.95 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.95 }}
-                className="glass-card p-6 rounded-[2rem] flex flex-col lg:flex-row gap-8 hover:border-tech-cyan/30 transition-colors"
+                key="empty"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="text-center py-20 bg-white/5 rounded-[2rem] border-2 border-dashed border-white/5"
               >
-                {/* Student Info */}
-                <div className="flex items-center gap-4 min-w-[250px]">
-                  <div className="text-4xl w-16 h-16 bg-tech-bg/50 rounded-2xl flex items-center justify-center shadow-inner border border-white/5">
-                    {student.avatar}
-                  </div>
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-black text-lg text-white font-display uppercase tracking-tight">{student.name}</h3>
-                      <input
-                        type="text"
-                        defaultValue={student.grade || ''}
-                        placeholder="Série"
-                        onBlur={(e) => updateGrade(student.id, e.target.value)}
-                        className="w-20 px-2 py-0.5 rounded-md bg-tech-cyan/10 text-tech-cyan text-[10px] font-black uppercase tracking-widest border border-tech-cyan/20 focus:ring-1 focus:ring-tech-cyan outline-none"
-                      />
-                    </div>
-                    <p className="text-xs text-slate-500 font-bold">{student.email}</p>
-                    <div className="flex items-center gap-4 mt-2">
-                      <div className="flex items-center gap-1 text-tech-cyan font-black">
-                        <Star className="w-5 h-5 fill-current" />
-                        <span>{student.stars}</span>
-                      </div>
-                      <div className="flex items-center gap-1 text-tech-magenta font-black">
-                        <Trophy className="w-5 h-5" />
-                        <span>{student.trophies.length}</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Actions */}
-                <div className="flex-1 space-y-6">
-                  {/* Stars Control */}
-                  <div className="flex items-center gap-4">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Energia:</span>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => updateStars(student.id, student.stars, -1)}
-                        className="w-10 h-10 rounded-xl bg-white/5 text-white hover:bg-white/10 transition-colors flex items-center justify-center font-black text-xl border border-white/10"
-                      >
-                        -
-                      </button>
-                      <button
-                        onClick={() => updateStars(student.id, student.stars, 1)}
-                        className="w-10 h-10 rounded-xl bg-tech-cyan/10 text-tech-cyan hover:bg-tech-cyan/20 transition-colors flex items-center justify-center font-black text-xl border border-tech-cyan/20"
-                      >
-                        +
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Trophies Grid */}
-                  <div>
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-3">Módulos de Conquista:</span>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2">
-                      {TROPHIES.map(t => (
-                        <button
-                          key={t.id}
-                          onClick={() => toggleTrophy(student, t.id)}
-                          title={t.description}
-                          className={cn(
-                            "p-2 text-[9px] font-black rounded-xl border transition-all text-center leading-tight h-16 flex flex-col items-center justify-center gap-1 uppercase tracking-tighter",
-                            student.trophies.includes(t.id)
-                              ? "bg-tech-cyan text-tech-bg border-tech-cyan shadow-[0_0_10px_rgba(34,211,238,0.3)]"
-                              : "bg-white/5 text-slate-500 border-white/5 hover:border-tech-cyan/30"
-                          )}
-                        >
-                          <Award className={cn("w-4 h-4", student.trophies.includes(t.id) ? "text-tech-bg" : "text-slate-600")} />
-                          {t.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Delete */}
-                <div className="flex items-start justify-end">
-                  <button
-                    onClick={() => setShowConfirmDelete({ id: student.id, type: 'student' })}
-                    className="p-3 text-slate-600 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
-                  >
-                    <Trash2 className="w-6 h-6" />
-                  </button>
-                </div>
+                <p className="text-slate-500 font-bold italic uppercase tracking-widest text-[10px]">Nenhum explorador encontrado...</p>
               </motion.div>
-            ))}
+            ) : (
+              filteredStudents.map(student => (
+                <motion.div
+                  key={student.id}
+                  layout
+                  initial={{ opacity: 0, scale: 0.95 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="glass-card p-6 rounded-[2rem] flex flex-col lg:flex-row gap-8 hover:border-tech-cyan/30 transition-colors"
+                >
+                  {/* Student Info */}
+                  <div className="flex items-center gap-6 min-w-[300px]">
+                    <div className="text-4xl w-20 h-20 bg-tech-bg/50 rounded-2xl flex items-center justify-center shadow-inner border border-white/5 shrink-0">
+                      {student.avatar}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <h3 className="font-black text-xl text-white font-display uppercase tracking-tight leading-tight">{student.name}</h3>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-tech-cyan uppercase tracking-widest">Série:</span>
+                        <input
+                          type="text"
+                          defaultValue={student.grade || ''}
+                          placeholder="Ex: 5º B"
+                          onBlur={(e) => updateGrade(student.id, e.target.value)}
+                          className="w-24 px-2 py-1 rounded-lg bg-tech-cyan/5 text-tech-cyan text-[10px] font-black uppercase tracking-widest border border-tech-cyan/20 focus:bg-tech-cyan/10 focus:ring-1 focus:ring-tech-cyan outline-none transition-all"
+                        />
+                      </div>
+                      <p className="text-[10px] text-slate-500 font-bold tracking-wider uppercase mt-1">{student.email}</p>
+                      <div className="flex items-center gap-4 mt-3">
+                        <div className="flex items-center gap-1 text-tech-cyan font-black">
+                          <Star className="w-4 h-4 fill-current" />
+                          <span className="text-sm">{student.stars}</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-tech-magenta font-black">
+                          <Trophy className="w-4 h-4" />
+                          <span className="text-sm">{student.trophies.length}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex-1 space-y-6">
+                    {/* Stars Control */}
+                    <div className="flex items-center gap-4">
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Energia:</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => updateStars(student.id, student.stars, -1)}
+                          className="w-10 h-10 rounded-xl bg-white/5 text-white hover:bg-white/10 transition-colors flex items-center justify-center font-black text-xl border border-white/10"
+                        >
+                          -
+                        </button>
+                        <button
+                          onClick={() => updateStars(student.id, student.stars, 1)}
+                          className="w-10 h-10 rounded-xl bg-tech-cyan/10 text-tech-cyan hover:bg-tech-cyan/20 transition-colors flex items-center justify-center font-black text-xl border border-tech-cyan/20"
+                        >
+                          +
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Trophies Grid */}
+                    <div>
+                      <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em] block mb-3">Módulos de Conquista:</span>
+                      <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-6 gap-2">
+                        {TROPHIES.map(t => (
+                          <button
+                            key={t.id}
+                            onClick={() => toggleTrophy(student, t.id)}
+                            title={t.description}
+                            className={cn(
+                              "p-2 text-[9px] font-black rounded-xl border transition-all text-center leading-tight h-16 flex flex-col items-center justify-center gap-1 uppercase tracking-tighter",
+                              student.trophies.includes(t.id)
+                                ? "bg-tech-cyan text-tech-bg border-tech-cyan shadow-[0_0_10px_rgba(34,211,238,0.3)]"
+                                : "bg-white/5 text-slate-500 border-white/5 hover:border-tech-cyan/30"
+                            )}
+                          >
+                            <Award className={cn("w-4 h-4", student.trophies.includes(t.id) ? "text-tech-bg" : "text-slate-600")} />
+                            {t.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Delete */}
+                  <div className="flex items-start justify-end">
+                    <button
+                      onClick={() => setShowConfirmDelete({ id: student.id, type: 'student' })}
+                      className="p-3 text-slate-600 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all"
+                    >
+                      <Trash2 className="w-6 h-6" />
+                    </button>
+                  </div>
+                </motion.div>
+              ))
+            )}
           </AnimatePresence>
         </div>
       </section>
@@ -541,6 +592,8 @@ export default function TeacherDashboard() {
                   ? 'Esta ação removerá o aluno e todo o seu progresso permanentemente.' 
                   : showConfirmDelete.type === 'all_students'
                   ? 'ATENÇÃO: Isso excluirá TODOS os alunos e seus progressos. Esta ação não pode ser desfeita!'
+                  : showConfirmDelete.type === 'all_unassigned'
+                  ? 'Isso excluirá apenas os alunos que não têm uma série definida. Deseja continuar?'
                   : showConfirmDelete.type === 'all_suggestions'
                   ? 'ATENÇÃO: Isso excluirá TODAS as mensagens recebidas. Esta ação não pode ser desfeita!'
                   : 'Esta mensagem será apagada para sempre.'}
@@ -556,6 +609,7 @@ export default function TeacherDashboard() {
                   onClick={() => {
                     if (showConfirmDelete.type === 'student') deleteStudent(showConfirmDelete.id as string);
                     else if (showConfirmDelete.type === 'all_students') deleteAllStudents();
+                    else if (showConfirmDelete.type === 'all_unassigned') deleteUnassignedStudents();
                     else if (showConfirmDelete.type === 'all_suggestions') deleteAllSuggestions();
                     else deleteSuggestion(showConfirmDelete.id as string);
                   }}

@@ -7,12 +7,13 @@ import { Trophy, Star, Award, Medal } from 'lucide-react';
 
 export default function Ranking() {
   const [students, setStudents] = useState<Student[]>([]);
+  const [gradeFilter, setGradeFilter] = useState('all');
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Ordering by stars desc on the server ensures we always get the top performers first.
-    // If we have more than 100 students, this is essential.
-    const q = query(collection(db, 'students'), orderBy('stars', 'desc'), limit(100));
+    // Ordering by stars desc on the server.
+    // We increase the limit to 1000 to ensure we capture more students for the grade filter.
+    const q = query(collection(db, 'students'), orderBy('stars', 'desc'), limit(1000));
     
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const studentList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
@@ -31,7 +32,7 @@ export default function Ranking() {
       console.error("Erro ao carregar ranking:", error);
       // Fallback: If stars desc requires an index that doesn't exist, it might fail.
       // In that case, we try without orderBy.
-      const fallbackQuery = query(collection(db, 'students'), limit(100));
+      const fallbackQuery = query(collection(db, 'students'), limit(1000));
       onSnapshot(fallbackQuery, (snapshot) => {
         const studentList = snapshot.docs.map(d => ({ id: d.id, ...d.data() } as Student));
         const sortedList = [...studentList].sort((a, b) => {
@@ -45,6 +46,14 @@ export default function Ranking() {
     
     return unsubscribe;
   }, []);
+
+  const filteredStudents = students.filter(s => 
+    gradeFilter === 'all' || s.grade?.trim() === gradeFilter
+  );
+
+  const uniqueGrades = (Array.from(new Set(students.map(s => s.grade?.trim()).filter(Boolean))) as string[]).sort((a, b) => 
+    a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+  );
 
   if (loading) return <div className="text-center py-20">Carregando ranking...</div>;
 
@@ -63,9 +72,22 @@ export default function Ranking() {
         <p className="text-xl text-tech-magenta font-bold tracking-wide italic">"Quem ensina aprende ao ensinar e quem aprende ensina ao aprender."</p>
       </div>
 
+      <div className="flex justify-center">
+        <select
+          value={gradeFilter}
+          onChange={e => setGradeFilter(e.target.value)}
+          className="px-6 py-3 rounded-2xl bg-tech-bg/50 border border-white/10 text-white focus:ring-2 focus:ring-tech-cyan outline-none font-black text-xs uppercase tracking-[0.2em] cursor-pointer shadow-lg hover:border-tech-cyan/30 transition-all"
+        >
+          <option value="all">Todas as Séries</option>
+          {uniqueGrades.map(grade => (
+            <option key={grade} value={grade}>{grade}</option>
+          ))}
+        </select>
+      </div>
+
       <div className="grid grid-cols-1 gap-6">
         <AnimatePresence>
-          {students.map((student, index) => {
+          {filteredStudents.map((student, index) => {
             const isTop3 = index < 3;
             const rankColors = [
               "bg-gradient-to-br from-amber-300 to-amber-600 text-tech-bg shadow-[0_0_25px_rgba(251,191,36,0.5)]",
@@ -135,9 +157,9 @@ export default function Ranking() {
           })}
         </AnimatePresence>
 
-        {students.length === 0 && (
-          <div className="text-center py-20 bg-white rounded-3xl border-2 border-dashed border-indigo-100">
-            <p className="text-slate-400 font-medium">Nenhum aluno no ranking ainda.</p>
+        {filteredStudents.length === 0 && (
+          <div className="text-center py-20 glass-card rounded-[2.5rem] border-2 border-dashed border-white/5">
+            <p className="text-slate-500 font-bold italic">Nenhum aluno no ranking para esta série.</p>
           </div>
         )}
       </div>
