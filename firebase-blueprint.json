@@ -13,8 +13,7 @@
           "type": "array",
           "items": { "type": "string" },
           "description": "List of trophies earned by the student."
-        },
-        "isHelper": { "type": "boolean", "description": "Whether the student is a helper." }
+        }
       },
       "required": ["name", "email", "stars", "trophies"]
     },

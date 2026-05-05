@@ -171,7 +171,7 @@ export default function StudentDashboard() {
             <div className="flex items-center gap-5 bg-tech-magenta/10 px-10 py-6 rounded-3xl border border-tech-magenta/20 shadow-inner">
               <Trophy className="w-10 h-10 text-tech-magenta drop-shadow-[0_0_12px_rgba(244,114,182,0.7)]" />
               <div>
-                <span className="block text-4xl font-black text-white font-display leading-none">{student.trophies.length}</span>
+                <span className="block text-4xl font-black text-white font-display leading-none">{student.trophies?.length || 0}</span>
                 <span className="text-[10px] font-black text-tech-magenta uppercase tracking-[0.2em]">Troféus</span>
               </div>
             </div>
@@ -219,7 +219,7 @@ export default function StudentDashboard() {
         </h3>
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-6">
           {TROPHIES.map(t => {
-            const hasTrophy = student.trophies.includes(t.id);
+            const hasTrophy = student.trophies?.includes(t.id);
             return (
               <div
                 key={t.id}

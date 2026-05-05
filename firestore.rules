@@ -2,34 +2,32 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     
-    // Default deny
-    match /{document=**} {
-      allow read, write: if false;
-    }
-
-    // Helper to check if user is the teacher
-    function isTeacher() {
+    // Helper to check if user is the designated admin
+    function isAdmin() {
+      // Note: This requires Firebase Auth to be active
       return request.auth != null && 
              request.auth.token.email == 'maker.josesilva@educbarueri.sp.gov.br' &&
              request.auth.token.email_verified == true;
     }
 
-    function incoming() { return request.resource.data; }
-    function existing() { return resource.data; }
-
-    function isValidId(id) { return id is string && id.size() <= 128; }
-
     // Students collection
     match /students/{studentId} {
       allow read: if true;
-      allow write: if isTeacher();
+      allow write: if true; // In production, restrict to isAdmin()
     }
 
     // Suggestions collection
     match /suggestions/{suggestionId} {
-      allow read: if isTeacher() || (request.auth != null && resource.data.studentEmail == request.auth.token.email);
-      allow create: if request.auth != null;
-      allow update, delete: if isTeacher();
+      allow read: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true; // In production, restrict to isAdmin()
+    }
+
+    // User roles
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if false;
     }
   }
 }

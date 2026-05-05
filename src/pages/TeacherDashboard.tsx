@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth, Student, Suggestion, TROPHIES, cn } from '../App';
 import { db } from '../firebase';
-import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp } from 'firebase/firestore';
+import { collection, onSnapshot, addDoc, deleteDoc, doc, updateDoc, query, orderBy, serverTimestamp, arrayUnion, arrayRemove } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'motion/react';
 import { Plus, Trash2, Star, Trophy, MessageSquare, CheckCircle, XCircle, UserPlus, Search, ChevronRight, Award, Users } from 'lucide-react';
 
 export default function TeacherDashboard() {
-  const { user, isTeacher, loginTeacher, loginWithGoogle, logout } = useAuth();
+  const { user, isTeacher, loginTeacher, logout } = useAuth();
   const [loginForm, setLoginForm] = useState({ username: '', password: '' });
   const [error, setError] = useState('');
 
@@ -17,7 +17,7 @@ export default function TeacherDashboard() {
   const [isBulkMode, setIsBulkMode] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [gradeFilter, setGradeFilter] = useState('all');
-  const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: string | 'all' | 'unassigned'; type: 'student' | 'suggestion' | 'all_students' | 'all_suggestions' | 'all_unassigned' } | null>(null);
+  const [showConfirmDelete, setShowConfirmDelete] = useState<{ id: string | 'all'; type: 'student' | 'suggestion' | 'all_students' | 'all_suggestions' } | null>(null);
   const [bulkStatus, setBulkStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
@@ -82,21 +82,6 @@ export default function TeacherDashboard() {
           >
             Entrar no Comando
           </button>
-          
-          <div className="flex items-center gap-4 my-2">
-            <div className="h-px flex-1 bg-white/5" />
-            <span className="text-[10px] font-black text-slate-600 uppercase tracking-widest italic">OU</span>
-            <div className="h-px flex-1 bg-white/5" />
-          </div>
-
-          <button
-            type="button"
-            onClick={loginWithGoogle}
-            className="w-full bg-white/5 border border-white/10 text-white py-4 rounded-2xl font-black hover:bg-white/10 transition-all flex items-center justify-center gap-3 uppercase tracking-widest text-xs"
-          >
-            <img src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg" className="w-5 h-5" alt="Google" />
-            Entrar com Google (Recomendado)
-          </button>
         </form>
       </div>
     );
@@ -136,31 +121,6 @@ export default function TeacherDashboard() {
     setShowConfirmDelete(null);
     setBulkStatus({ type: 'success', message: 'Todos os alunos foram removidos.' });
     setTimeout(() => setBulkStatus(null), 3000);
-  };
-
-  const deleteUnassignedStudents = async () => {
-    const unassigned = students.filter(s => !s.grade || !s.grade.trim());
-    const batch = unassigned.map(s => deleteDoc(doc(db, 'students', s.id)));
-    await Promise.all(batch);
-    setShowConfirmDelete(null);
-    setBulkStatus({ type: 'success', message: `${unassigned.length} alunos sem série foram removidos.` });
-    setTimeout(() => setBulkStatus(null), 3000);
-  };
-
-  const toggleHelper = async (studentId: string, currentStatus: boolean) => {
-    try {
-      await updateDoc(doc(db, 'students', studentId), {
-        isHelper: !currentStatus
-      });
-      setBulkStatus({ 
-        type: 'success', 
-        message: !currentStatus ? 'Aluno promovido a ajudante!' : 'Aluno removido das funções de ajudante.' 
-      });
-      setTimeout(() => setBulkStatus(null), 3000);
-    } catch (err) {
-      setBulkStatus({ type: 'error', message: 'Erro ao atualizar status de ajudante.' });
-      setTimeout(() => setBulkStatus(null), 3000);
-    }
   };
 
   const handleBulkAdd = async (e: React.FormEvent) => {
@@ -233,21 +193,29 @@ export default function TeacherDashboard() {
   };
 
   const toggleTrophy = async (student: Student, trophyId: string) => {
-    const hasTrophy = student.trophies.includes(trophyId);
-    const newTrophies = hasTrophy 
-      ? student.trophies.filter(t => t !== trophyId)
-      : [...student.trophies, trophyId];
-    
-    await updateDoc(doc(db, 'students', student.id), {
-      trophies: newTrophies
-    });
+    try {
+      const currentTrophies = student.trophies || [];
+      const hasTrophy = Array.isArray(currentTrophies) && currentTrophies.includes(trophyId);
+      
+      await updateDoc(doc(db, 'students', student.id), {
+        trophies: hasTrophy ? arrayRemove(trophyId) : arrayUnion(trophyId)
+      });
+    } catch (err) {
+      console.error("Error toggling trophy:", err);
+      setBulkStatus({ type: 'error', message: 'Erro ao atualizar conquista. Verifique sua conexão.' });
+      setTimeout(() => setBulkStatus(null), 3000);
+    }
   };
 
   const handleFeedback = async (suggestion: Suggestion, feedback: string) => {
-    await updateDoc(doc(db, 'suggestions', suggestion.id), {
-      feedback,
-      status: 'answered'
-    });
+    try {
+      await updateDoc(doc(db, 'suggestions', suggestion.id), {
+        feedback,
+        status: 'answered'
+      });
+    } catch (err) {
+      console.error("Error updating feedback:", err);
+    }
   };
 
   const filteredStudents = students.filter(s => {
@@ -372,28 +340,16 @@ export default function TeacherDashboard() {
               <Users className="w-6 h-6" />
             </div>
             <h2 className="text-2xl font-black text-white font-display uppercase tracking-tight">Gerenciar Alunos</h2>
-            <div className="flex items-center gap-2">
-              {students.length > 0 && (
-                <button
-                  onClick={() => setShowConfirmDelete({ id: 'all', type: 'all_students' })}
-                  className="p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                  title="Excluir todos os alunos"
-                >
-                  <Trash2 className="w-4 h-4" />
-                  <span className="hidden sm:inline">Excluir Todos</span>
-                </button>
-              )}
-              {students.some(s => !s.grade || !s.grade.trim()) && (
-                <button
-                  onClick={() => setShowConfirmDelete({ id: 'unassigned', type: 'all_unassigned' })}
-                  className="p-2 text-amber-500 hover:text-amber-400 hover:bg-amber-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
-                  title="Excluir alunos sem série"
-                >
-                  <XCircle className="w-4 h-4" />
-                  <span className="hidden sm:inline">Limpar Sem Série</span>
-                </button>
-              )}
-            </div>
+            {students.length > 0 && (
+              <button
+                onClick={() => setShowConfirmDelete({ id: 'all', type: 'all_students' })}
+                className="ml-2 p-2 text-slate-500 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest"
+                title="Excluir todos os alunos"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span className="hidden sm:inline">Excluir Todos</span>
+              </button>
+            )}
           </div>
           <div className="flex flex-col md:flex-row gap-4">
             <div className="relative">
@@ -462,11 +418,11 @@ export default function TeacherDashboard() {
                       <div className="flex items-center gap-4 mt-3">
                         <div className="flex items-center gap-1 text-tech-cyan font-black">
                           <Star className="w-4 h-4 fill-current" />
-                          <span className="text-sm">{student.stars}</span>
+                          <span className="text-sm">{student.stars || 0}</span>
                         </div>
                         <div className="flex items-center gap-1 text-tech-magenta font-black">
                           <Trophy className="w-4 h-4" />
-                          <span className="text-sm">{student.trophies.length}</span>
+                          <span className="text-sm">{Array.isArray(student.trophies) ? student.trophies.length : 0}</span>
                         </div>
                       </div>
                     </div>
@@ -479,13 +435,13 @@ export default function TeacherDashboard() {
                       <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Energia:</span>
                       <div className="flex items-center gap-2">
                         <button
-                          onClick={() => updateStars(student.id, student.stars, -1)}
+                          onClick={() => updateStars(student.id, student.stars || 0, -1)}
                           className="w-10 h-10 rounded-xl bg-white/5 text-white hover:bg-white/10 transition-colors flex items-center justify-center font-black text-xl border border-white/10"
                         >
                           -
                         </button>
                         <button
-                          onClick={() => updateStars(student.id, student.stars, 1)}
+                          onClick={() => updateStars(student.id, student.stars || 0, 1)}
                           className="w-10 h-10 rounded-xl bg-tech-cyan/10 text-tech-cyan hover:bg-tech-cyan/20 transition-colors flex items-center justify-center font-black text-xl border border-tech-cyan/20"
                         >
                           +
@@ -504,12 +460,12 @@ export default function TeacherDashboard() {
                             title={t.description}
                             className={cn(
                               "p-2 text-[9px] font-black rounded-xl border transition-all text-center leading-tight h-16 flex flex-col items-center justify-center gap-1 uppercase tracking-tighter",
-                              student.trophies.includes(t.id)
+                              Array.isArray(student.trophies) && student.trophies.includes(t.id)
                                 ? "bg-tech-cyan text-tech-bg border-tech-cyan shadow-[0_0_10px_rgba(34,211,238,0.3)]"
                                 : "bg-white/5 text-slate-500 border-white/5 hover:border-tech-cyan/30"
                             )}
                           >
-                            <Award className={cn("w-4 h-4", student.trophies.includes(t.id) ? "text-tech-bg" : "text-slate-600")} />
+                            <Award className={cn("w-4 h-4", Array.isArray(student.trophies) && student.trophies.includes(t.id) ? "text-tech-bg" : "text-slate-600")} />
                             {t.name}
                           </button>
                         ))}
@@ -623,8 +579,6 @@ export default function TeacherDashboard() {
                   ? 'Esta ação removerá o aluno e todo o seu progresso permanentemente.' 
                   : showConfirmDelete.type === 'all_students'
                   ? 'ATENÇÃO: Isso excluirá TODOS os alunos e seus progressos. Esta ação não pode ser desfeita!'
-                  : showConfirmDelete.type === 'all_unassigned'
-                  ? 'Isso excluirá apenas os alunos que não têm uma série definida. Deseja continuar?'
                   : showConfirmDelete.type === 'all_suggestions'
                   ? 'ATENÇÃO: Isso excluirá TODAS as mensagens recebidas. Esta ação não pode ser desfeita!'
                   : 'Esta mensagem será apagada para sempre.'}
@@ -640,7 +594,6 @@ export default function TeacherDashboard() {
                   onClick={() => {
                     if (showConfirmDelete.type === 'student') deleteStudent(showConfirmDelete.id as string);
                     else if (showConfirmDelete.type === 'all_students') deleteAllStudents();
-                    else if (showConfirmDelete.type === 'all_unassigned') deleteUnassignedStudents();
                     else if (showConfirmDelete.type === 'all_suggestions') deleteAllSuggestions();
                     else deleteSuggestion(showConfirmDelete.id as string);
                   }}
